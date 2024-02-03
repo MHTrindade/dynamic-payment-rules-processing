@@ -2,11 +2,28 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
+
+// Enumeração para ProductType
+type ProductType string
+
+const (
+	CommonProductType   ProductType = "comum"
+	PhysicalProductType ProductType = "físico"
+	BookProductType     ProductType = "livro"
+	UnknownProductType  ProductType = "desconhecido"
+)
+
+// Estrutura para representar um produto
+type Product struct {
+	Description           string      `json:"description"`
+	IsPhysical            bool        `json:"is_physical"`  // Indica se o produto é físico
+	ProductType           ProductType `json:"product_type"` // Tipo de produto (livro, físico, associação, vídeo, etc.)
+	RequiresFirstAidVideo bool        `json:"requires_first_aid_video"`
+}
 
 // Interface para estratégias de processamento de pagamento
 type PaymentStrategy interface {
@@ -65,14 +82,6 @@ type PaymentProcessor struct {
 // Método para processar um pagamento usando a estratégia definida
 func (p *PaymentProcessor) ProcessPayment(request PaymentRequest) (string, error) {
 	return p.Strategy.ProcessPayment(request)
-}
-
-// Estrutura para representar um produto
-type Product struct {
-	Description           string `json:"description"`
-	IsPhysical            bool   `json:"is_physical"`  // Indica se o produto é físico
-	ProductType           string `json:"product_type"` // Tipo de produto (livro, físico, associação, vídeo, etc.)
-	RequiresFirstAidVideo bool   `json:"requires_first_aid_video"`
 }
 
 // Estrutura para representar um pedido de pagamento
@@ -160,15 +169,49 @@ func handlePayment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID})
 }
 
+// Factory para criar instâncias de PaymentProcessor com base no tipo de produto
+func createPaymentProcessor(productType ProductType) *PaymentProcessor {
+	var strategy PaymentStrategy
+
+	switch productType {
+	case CommonProductType:
+		strategy = &CommonPaymentStrategy{}
+	case PhysicalProductType:
+		strategy = &PhysicalProductPaymentStrategy{}
+	case BookProductType:
+		strategy = &BookPaymentStrategy{}
+	default:
+		// Se o tipo de produto não for reconhecido, use uma estratégia padrão ou retorne um erro, conforme necessário
+		strategy = &CommonPaymentStrategy{}
+	}
+
+	return &PaymentProcessor{Strategy: strategy}
+}
+
+// Rota única para processar pagamentos
+func processPayment(c *gin.Context) {
+	var request PaymentRequest
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	processor := createPaymentProcessor(request.Product.ProductType)
+
+	transactionID, err := processor.ProcessPayment(request)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID})
+}
+
 func main() {
-	// Cria uma instância do Gin
 	r := gin.Default()
 
-	// Configura o manipulador para o endpoint de pagamento
-	r.POST("/payment", handlePayment)
+	// Rota para processar pagamentos
+	r.POST("/processPayment", processPayment)
 
-	// Inicia o servidor na porta 8080 usando o Gin
-	port := 8080
-	fmt.Printf("Servidor iniciado na porta %d...\n", port)
-	log.Fatal(r.Run(fmt.Sprintf(":%d", port)))
+	r.Run(":8080")
 }
