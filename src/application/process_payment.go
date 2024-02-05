@@ -35,6 +35,8 @@ func createPaymentProcessor(productType domain.ProductType) *domain.PaymentProce
 		strategy = &domain.PhysicalProductPaymentStrategy{}
 	case domain.BookProductType:
 		strategy = &domain.BookPaymentStrategy{}
+	case domain.VideoProductType:
+		strategy = &domain.VideoPaymentStrategy{}
 	default:
 		strategy = &domain.CommonPaymentStrategy{}
 	}
